@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation & Deep Injected Overrider
+        // Handle in-app navigation & Concrete CSS Overrider
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -82,57 +82,61 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                injectUltimateBlocker(view);
+                injectConcreteBlocker(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectUltimateBlocker(view);
+                injectConcreteBlocker(view);
             }
 
-            private void injectUltimateBlocker(WebView view) {
+            private void injectConcreteBlocker(WebView view) {
                 String targetSelectors = 
                     ".DownloadAppPopup, " +
                     "div[data-sentry-component='DownloadAppPopup'], " +
                     ".DownloadAppTopBar, " +
                     "div[data-sentry-component='DownloadAppTopBar'], " +
-                    "div[class*='bg-black']";
+                    "div[class*='bg-black'], " +
+                    "div[class*='Fixed'], " +
+                    "div[class*='fixed']";
 
                 String injectedJS =
                     "(function(){" +
                     "  var SELECTORS = '" + targetSelectors + "';" +
                     "  " +
-                    "  function nukeTargetElements() {" +
+                    "  function concreteClean() {" +
                     "    try {" +
-                    "      if (SELECTORS) {" +
-                    "        document.querySelectorAll(SELECTORS).forEach(function(el){" +
-                    "          if(el) el.remove();" +
-                    "        });" +
+                    "      var id = 'ublock-concrete-layer';" +
+                    "      var style = document.getElementById(id);" +
+                    "      if(!style) {" +
+                    "        style = document.createElement('style');" +
+                    "        style.id = id;" +
+                    "        style.innerHTML = " +
+                    "          SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' + " +
+                    "          'body { overflow: auto !important; pointer-events: auto !important; } ' + " +
+                    "          'html { overflow: auto !important; }';" +
+                    "        (document.head || document.documentElement).appendChild(style);" +
                     "      }" +
-                    "      var allDivs = document.querySelectorAll('div, section, dialog');" +
-                    "      allDivs.forEach(HardScanElement);" +
-                    "    } catch(e) {}" +
-                    "  }" +
-                    "  " +
-                    "  function HardScanElement(el) {" +
-                    "    try {" +
-                    "      if (!el || el === document.body || el === document.documentElement) return;" +
-                    "      var style = window.getComputedStyle(el);" +
-                    "      var isFixedOrAbsolute = style.position === 'fixed' || style.position === 'absolute';" +
-                    "      if (!isFixedOrAbsolute) return;" +
                     "      " +
-                    "      var text = el.innerText || el.textContent || '';" +
-                    "      var hasTriggerWords = text.indexOf('Keep playing in Sekai?') !== -1 || " +
-                    "                            text.indexOf('Download the Sekai app') !== -1 || " +
-                    "                            text.indexOf('Download') !== -1;" +
-                    "      " +
-                    "      var zIndex = parseInt(style.zIndex, 10) || 0;" +
-                    "      if (hasTriggerWords && (zIndex > 10 || style.position === 'fixed')) {" +
-                    "        el.style.setProperty('display', 'none', 'important');" +
-                    "        el.style.setProperty('visibility', 'hidden', 'important');" +
-                    "        setTimeout(function(){ if(el && el.parentNode) el.remove(); }, 0);" +
-                    "      }" +
+                    "      var elements = document.querySelectorAll('*');" +
+                    "      elements.forEach(function(el) {" +
+                    "        if (el && el.shadowRoot) {" +
+                    "          var subStyle = el.shadowRoot.getElementById('sub-concrete-layer');" +
+                    "          if (!subStyle) {" +
+                    "            subStyle = document.createElement('style');" +
+                    "            subStyle.id = 'sub-concrete-layer';" +
+                    "            subStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; }';" +
+                    "            el.shadowRoot.appendChild(subStyle);" +
+                    "          }" +
+                    "        }" +
+                    "        var txt = el.innerText || el.textContent || '';" +
+                    "        if (txt.indexOf('Keep playing in Sekai?') !== -1 || txt.indexOf('Download the Sekai app') !== -1) {" +
+                    "          el.style.setProperty('display', 'none', 'important');" +
+                    "          el.style.setProperty('z-index', '-9999', 'important');" +
+                    "          if (el.parentNode) el.remove();" +
+                    "        }" +
+                    "      });" +
                     "    } catch(e) {}" +
                     "  }" +
                     "  " +
@@ -143,39 +147,15 @@ public class MainActivity extends Activity {
                     "    (document.head || document.documentElement).appendChild(m);" +
                     "  } catch(e) {}" +
                     "  " +
-                    "  if (!window.isUltimateIntercepted) {" +
-                    "    window.isUltimateIntercepted = true;" +
-                    "    " +
-                    "    var orgCreate = Document.prototype.createElement;" +
-                    "    Document.prototype.createElement = function(tag) {" +
-                    "      var el = orgCreate.apply(this, arguments);" +
-                    "      if (tag.toLowerCase() === 'div') {" +
-                    "        var orgSet = el.setAttribute;" +
-                    "        el.setAttribute = function(name, val) {" +
-                    "          orgSet.apply(this, arguments);" +
-                    "          if (name === 'class' || name === 'data-sentry-component') {" +
-                    "            if (val.indexOf('DownloadApp') !== -1) {" +
-                    "              el.style.setProperty('display', 'none', 'important');" +
-                    "              setTimeout(function(){ el.remove(); }, 0);" +
-                    "            }" +
-                    "          }" +
-                    "        };" +
-                    "      }" +
-                    "      return el;" +
-                    "    };" +
-                    "    " +
-                    "    var cssStyle = document.createElement('style');" +
-                    "    cssStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
-                    "    (document.head || document.documentElement).appendChild(cssStyle);" +
-                    "    " +
-                    "    var obs = new MutationObserver(nukeTargetElements);" +
+                    "  if (!window.isConcreteActive) {" +
+                    "    window.isConcreteActive = true;" +
+                    "    var obs = new MutationObserver(concreteClean);" +
                     "    obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true});" +
-                    "    " +
-                    "    window.addEventListener('input', nukeTargetElements, true);" +
-                    "    window.addEventListener('keydown', nukeTargetElements, true);" +
-                    "    setInterval(nukeTargetElements, 300);" +
+                    "    window.addEventListener('input', concreteClean, true);" +
+                    "    window.addEventListener('keydown', concreteClean, true);" +
+                    "    setInterval(concreteClean, 200);" +
                     "  }" +
-                    "  nukeTargetElements();" +
+                    "  concreteClean();" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);

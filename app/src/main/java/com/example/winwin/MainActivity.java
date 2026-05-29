@@ -64,11 +64,17 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation & Concrete CSS Overrider
+        // Handle in-app navigation & Counter-Attack Blockers
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
+                
+                // Hijack play store or market redirection attempts from the popup
+                if (url.contains("play.google.com") || url.contains("market://") || url.contains("sekai.chat/download")) {
+                    return true; 
+                }
+
                 if (!url.contains("com") &&
                     (url.startsWith("intent:") || url.startsWith("market:"))) {
                     try {
@@ -82,80 +88,74 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                injectConcreteBlocker(view);
+                injectCounterBlocker(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectConcreteBlocker(view);
+                injectCounterBlocker(view);
             }
 
-            private void injectConcreteBlocker(WebView view) {
-                String targetSelectors = 
-                    ".DownloadAppPopup, " +
-                    "div[data-sentry-component='DownloadAppPopup'], " +
-                    ".DownloadAppTopBar, " +
-                    "div[data-sentry-component='DownloadAppTopBar'], " +
-                    "div[class*='bg-black'], " +
-                    "div[class*='Fixed'], " +
-                    "div[class*='fixed']";
-
+            private void injectCounterBlocker(WebView view) {
                 String injectedJS =
                     "(function(){" +
-                    "  var SELECTORS = '" + targetSelectors + "';" +
-                    "  " +
-                    "  function concreteClean() {" +
+                    "  function hijackAndAddCloseButton() {" +
                     "    try {" +
-                    "      var id = 'ublock-concrete-layer';" +
-                    "      var style = document.getElementById(id);" +
-                    "      if(!style) {" +
-                    "        style = document.createElement('style');" +
-                    "        style.id = id;" +
-                    "        style.innerHTML = " +
-                    "          SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; } ' + " +
-                    "          'body { overflow: auto !important; pointer-events: auto !important; } ' + " +
-                    "          'html { overflow: auto !important; }';" +
-                    "        (document.head || document.documentElement).appendChild(style);" +
-                    "      }" +
-                    "      " +
-                    "      var elements = document.querySelectorAll('*');" +
-                    "      elements.forEach(function(el) {" +
-                    "        if (el && el.shadowRoot) {" +
-                    "          var subStyle = el.shadowRoot.getElementById('sub-concrete-layer');" +
-                    "          if (!subStyle) {" +
-                    "            subStyle = document.createElement('style');" +
-                    "            subStyle.id = 'sub-concrete-layer';" +
-                    "            subStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; z-index: -9999 !important; }';" +
-                    "            el.shadowRoot.appendChild(subStyle);" +
+                    "      var allElements = document.querySelectorAll('div, section, dialog');" +
+                    "      allElements.forEach(function(el) {" +
+                    "        if (!el) return;" +
+                    "        var text = el.innerText || el.textContent || '';" +
+                    "        var isPopup = text.indexOf('Keep playing in Sekai?') !== -1 || text.indexOf('Download the Sekai app') !== -1;" +
+                    "        " +
+                    "        if (isPopup) {" +
+                    "          var style = window.getComputedStyle(el);" +
+                    "          if (style.position === 'fixed' || style.position === 'absolute' || parseInt(style.zIndex, 10) > 5) {" +
+                    "            " +
+                    "            el.setAttribute('data-target-popup', 'true');" +
+                    "            " +
+                    "            var downloadButtons = el.querySelectorAll('button, a, div');" +
+                    "            downloadButtons.forEach(function(btn) {" +
+                    "              if(btn.innerText && btn.innerText.indexOf('Download') !== -1) {" +
+                    "                if(!btn.hasHijacked) {" +
+                    "                  btn.hasHijacked = true;" +
+                    "                  btn.style.setProperty('background-color', '#4CAF50', 'important');" +
+                    "                  btn.addEventListener('click', function(e) {" +
+                    "                    e.preventDefault();" +
+                    "                    e.stopPropagation();" +
+                    "                    el.remove();" +
+                    "                  }, true);" +
+                    "                }" +
+                    "              }" +
+                    "            });" +
+                    "            " +
+                    "            if (!el.querySelector('.custom-close-btn')) {" +
+                    "              var closeBtn = document.createElement('div');" +
+                    "              closeBtn.className = 'custom-close-btn';" +
+                    "              closeBtn.innerText = 'X';" +
+                    "              closeBtn.style.cssText = 'position:absolute;top:10px;right:10px;width:30px;height:30px;background:red;color:white;font-weight:bold;text-align:center;line-height:30px;border-radius:50%;cursor:pointer;z-index:99999;font-size:16px;';" +
+                    "              closeBtn.addEventListener('click', function(e) {" +
+                    "                e.preventDefault();" +
+                    "                e.stopPropagation();" +
+                    "                el.remove();" +
+                    "              }, true);" +
+                    "              el.appendChild(closeBtn);" +
+                    "            }" +
                     "          }" +
-                    "        }" +
-                    "        var txt = el.innerText || el.textContent || '';" +
-                    "        if (txt.indexOf('Keep playing in Sekai?') !== -1 || txt.indexOf('Download the Sekai app') !== -1) {" +
-                    "          el.style.setProperty('display', 'none', 'important');" +
-                    "          el.style.setProperty('z-index', '-9999', 'important');" +
-                    "          if (el.parentNode) el.remove();" +
                     "        }" +
                     "      });" +
                     "    } catch(e) {}" +
                     "  }" +
                     "  " +
-                    "  try {" +
-                    "    var m = document.createElement('meta');" +
-                    "    m.name = 'viewport';" +
-                    "    m.content = 'width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
-                    "    (document.head || document.documentElement).appendChild(m);" +
-                    "  } catch(e) {}" +
-                    "  " +
-                    "  if (!window.isConcreteActive) {" +
-                    "    window.isConcreteActive = true;" +
-                    "    var obs = new MutationObserver(concreteClean);" +
+                    "  if (!window.isCounterActive) {" +
+                    "    window.isCounterActive = true;" +
+                    "    var obs = new MutationObserver(hijackAndAddCloseButton);" +
                     "    obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true});" +
-                    "    window.addEventListener('input', concreteClean, true);" +
-                    "    window.addEventListener('keydown', concreteClean, true);" +
-                    "    setInterval(concreteClean, 200);" +
+                    "    window.addEventListener('input', hijackAndAddCloseButton, true);" +
+                    "    window.addEventListener('keydown', hijackAndAddCloseButton, true);" +
+                    "    setInterval(hijackAndAddCloseButton, 300);" +
                     "  }" +
-                    "  concreteClean();" +
+                    "  hijackAndAddCloseButton();" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);
@@ -197,11 +197,38 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack();
+        // Ultimate Back Button Defense
+        // If the popup exists on screen, dismiss it first instead of leaving the page
+        if (webView != null) {
+            String dismissJS = 
+                "(function(){" +
+                "  var popup = document.querySelector('[data-target-popup=\"true\"]') || " +
+                "              document.querySelector('.DownloadAppPopup') || " +
+                "              document.querySelector('div[data-sentry-component=\"DownloadAppPopup\"]');" +
+                "  if (popup) {" +
+                "    popup.remove();" +
+                "    return true;" +
+                "  }" +
+                "  return false;" +
+                "})();";
+
+            webView.evaluateJavascript(dismissJS, new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String value) {
+                    if ("true".equals(value)) {
+                        // Popup was found and destroyed, do nothing else (consumed the back press)
+                    } else {
+                        // No popup found, proceed with normal web back navigation
+                        if (webView.canGoBack()) {
+                            webView.goBack();
+                        } else {
+                            MainActivity.super.onBackPressed();
+                        }
+                    }
+                }
+            });
         } else {
             super.onBackPressed();
         }
     }
 }
-

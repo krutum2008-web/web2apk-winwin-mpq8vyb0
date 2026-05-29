@@ -64,13 +64,13 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation & Counter-Attack Blockers
+        // Handle in-app navigation & Inject Anti-Freeze Blocker
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 
-                // Hijack play store or market redirection attempts from the popup
+                // Block all app-store or download redirects trying to hijack the page
                 if (url.contains("play.google.com") || url.contains("market://") || url.contains("sekai.chat/download")) {
                     return true; 
                 }
@@ -88,74 +88,89 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                injectCounterBlocker(view);
+                injectAntiFreezeBlocker(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectCounterBlocker(view);
+                injectAntiFreezeBlocker(view);
             }
 
-            private void injectCounterBlocker(WebView view) {
+            private void injectAntiFreezeBlocker(WebView view) {
                 String injectedJS =
                     "(function(){" +
-                    "  function hijackAndAddCloseButton() {" +
+                    "  function thawAndDestroy() {" +
                     "    try {" +
-                    "      var allElements = document.querySelectorAll('div, section, dialog');" +
-                    "      allElements.forEach(function(el) {" +
+                    "      var targetSelectors = 'div[class*=\"DownloadApp\"], div[data-sentry-component*=\"DownloadApp\"]';" +
+                    "      document.querySelectorAll(targetSelectors).forEach(function(el){" +
+                    "        if(el) el.remove();" +
+                    "      });" +
+                    "      " +
+                    "      var elements = document.querySelectorAll('*');" +
+                    "      elements.forEach(function(el) {" +
                     "        if (!el) return;" +
-                    "        var text = el.innerText || el.textContent || '';" +
-                    "        var isPopup = text.indexOf('Keep playing in Sekai?') !== -1 || text.indexOf('Download the Sekai app') !== -1;" +
                     "        " +
-                    "        if (isPopup) {" +
-                    "          var style = window.getComputedStyle(el);" +
-                    "          if (style.position === 'fixed' || style.position === 'absolute' || parseInt(style.zIndex, 10) > 5) {" +
-                    "            " +
-                    "            el.setAttribute('data-target-popup', 'true');" +
-                    "            " +
-                    "            var downloadButtons = el.querySelectorAll('button, a, div');" +
-                    "            downloadButtons.forEach(function(btn) {" +
-                    "              if(btn.innerText && btn.innerText.indexOf('Download') !== -1) {" +
-                    "                if(!btn.hasHijacked) {" +
-                    "                  btn.hasHijacked = true;" +
-                    "                  btn.style.setProperty('background-color', '#4CAF50', 'important');" +
-                    "                  btn.addEventListener('click', function(e) {" +
-                    "                    e.preventDefault();" +
-                    "                    e.stopPropagation();" +
-                    "                    el.remove();" +
-                    "                  }, true);" +
-                    "                }" +
-                    "              }" +
-                    "            });" +
-                    "            " +
-                    "            if (!el.querySelector('.custom-close-btn')) {" +
-                    "              var closeBtn = document.createElement('div');" +
-                    "              closeBtn.className = 'custom-close-btn';" +
-                    "              closeBtn.innerText = 'X';" +
-                    "              closeBtn.style.cssText = 'position:absolute;top:10px;right:10px;width:30px;height:30px;background:red;color:white;font-weight:bold;text-align:center;line-height:30px;border-radius:50%;cursor:pointer;z-index:99999;font-size:16px;';" +
-                    "              closeBtn.addEventListener('click', function(e) {" +
-                    "                e.preventDefault();" +
-                    "                e.stopPropagation();" +
-                    "                el.remove();" +
-                    "              }, true);" +
-                    "              el.appendChild(closeBtn);" +
+                    "        if (el.shadowRoot) {" +
+                    "          el.shadowRoot.querySelectorAll('div, section').forEach(function(subEl){" +
+                    "            var subTxt = subEl.innerText || subEl.textContent || '';" +
+                    "            if (subTxt.indexOf('Keep playing in Sekai?') !== -1) {" +
+                    "              subEl.remove();" +
                     "            }" +
+                    "          });" +
+                    "          " +
+                    "          var subStyle = el.shadowRoot.getElementById('anti-freeze-style');" +
+                    "          if (!subStyle) {" +
+                    "            subStyle = document.createElement('style');" +
+                    "            subStyle.id = 'anti-freeze-style';" +
+                    "            subStyle.innerHTML = '* { pointer-events: auto !important; user-select: auto !important; }';" +
+                    "            el.shadowRoot.appendChild(subStyle);" +
+                    "          }" +
+                    "        }" +
+                    "        " +
+                    "        var txt = el.innerText || el.textContent || '';" +
+                    "        if (txt.indexOf('Keep playing in Sekai?') !== -1 || txt.indexOf('Download the Sekai app') !== -1) {" +
+                    "          if (el.parentNode && el !== document.body && el !== document.documentElement) {" +
+                    "            el.remove();" +
                     "          }" +
                     "        }" +
                     "      });" +
+                    "      " +
+                    "      var bodyStyle = window.getComputedStyle(document.body);" +
+                    "      if (bodyStyle.pointerEvents === 'none' || bodyStyle.overflow === 'hidden') {" +
+                    "        document.body.style.setProperty('pointer-events', 'auto', 'important');" +
+                    "        document.body.style.setProperty('overflow', 'auto', 'important');" +
+                    "      }" +
+                    "      " +
+                    "      var htmlStyle = window.getComputedStyle(document.documentElement);" +
+                    "      if (htmlStyle.pointerEvents === 'none' || htmlStyle.overflow === 'hidden') {" +
+                    "        document.documentElement.style.setProperty('pointer-events', 'auto', 'important');" +
+                    "        document.documentElement.style.setProperty('overflow', 'auto', 'important');" +
+                    "      }" +
                     "    } catch(e) {}" +
                     "  }" +
                     "  " +
-                    "  if (!window.isCounterActive) {" +
-                    "    window.isCounterActive = true;" +
-                    "    var obs = new MutationObserver(hijackAndAddCloseButton);" +
-                    "    obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true});" +
-                    "    window.addEventListener('input', hijackAndAddCloseButton, true);" +
-                    "    window.addEventListener('keydown', hijackAndAddCloseButton, true);" +
-                    "    setInterval(hijackAndAddCloseButton, 300);" +
+                    "  if (!window.isAntiFreezeLoaded) {" +
+                    "    window.isAntiFreezeLoaded = true;" +
+                    "    " +
+                    "    var globalStyle = document.createElement('style');" +
+                    "    globalStyle.innerHTML = " +
+                    "      'html, body, #root, #__next, main, [class*=\"layout\"], [class*=\"page\"] {' +
+                    "      '  pointer-events: auto !important; ' +
+                    "      '  overflow: auto !important; ' +
+                    "      '  user-select: auto !important; ' +
+                    "      '  visibility: visible !important;' +
+                    "      '}';" +
+                    "    (document.head || document.documentElement).appendChild(globalStyle);" +
+                    "    " +
+                    "    var obs = new MutationObserver(thawAndDestroy);" +
+                    "    obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class']});" +
+                    "    " +
+                    "    window.addEventListener('input', thawAndDestroy, true);" +
+                    "    window.addEventListener('keydown', thawAndDestroy, true);" +
+                    "    setInterval(thawAndDestroy, 150);" + // เร่งความเร็วเต็มสูบสแกนทุก 0.15 วินาที
                     "  }" +
-                    "  hijackAndAddCloseButton();" +
+                    "  thawAndDestroy();" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);
@@ -197,16 +212,14 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        // Ultimate Back Button Defense
-        // If the popup exists on screen, dismiss it first instead of leaving the page
         if (webView != null) {
             String dismissJS = 
                 "(function(){" +
-                "  var popup = document.querySelector('[data-target-popup=\"true\"]') || " +
-                "              document.querySelector('.DownloadAppPopup') || " +
-                "              document.querySelector('div[data-sentry-component=\"DownloadAppPopup\"]');" +
+                "  var popup = document.querySelector('div[class*=\"DownloadApp\"], div[data-sentry-component*=\"DownloadApp\"]');" +
                 "  if (popup) {" +
                 "    popup.remove();" +
+                "    document.body.style.setProperty('pointer-events', 'auto', 'important');" +
+                "    document.body.style.setProperty('overflow', 'auto', 'important');" +
                 "    return true;" +
                 "  }" +
                 "  return false;" +
@@ -216,9 +229,8 @@ public class MainActivity extends Activity {
                 @Override
                 public void onReceiveValue(String value) {
                     if ("true".equals(value)) {
-                        // Popup was found and destroyed, do nothing else (consumed the back press)
+                        // Popup was destroyed and screen unfrozen, absorb the click
                     } else {
-                        // No popup found, proceed with normal web back navigation
                         if (webView.canGoBack()) {
                             webView.goBack();
                         } else {
@@ -232,3 +244,4 @@ public class MainActivity extends Activity {
         }
     }
 }
+

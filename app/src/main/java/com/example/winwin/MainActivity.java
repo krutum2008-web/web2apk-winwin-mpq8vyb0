@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation & Inject Permanent Blocker
+        // Handle in-app navigation & Deep Injected Overrider
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -82,16 +82,16 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                injectPermanentBlocker(view);
+                injectAbsoluteBlocker(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectPermanentBlocker(view);
+                injectAbsoluteBlocker(view);
             }
 
-            private void injectPermanentBlocker(WebView view) {
+            private void injectAbsoluteBlocker(WebView view) {
                 String targetSelectors = 
                     ".DownloadAppPopup, " +
                     "div[data-sentry-component='DownloadAppPopup'], " +
@@ -104,37 +104,52 @@ public class MainActivity extends Activity {
                     "  var SELECTORS = '" + targetSelectors + "';" +
                     "  if(!SELECTORS) return;" +
                     "  " +
-                    "  function applyRule() {" +
-                    "    try{" +
-                    "      var id = 'ublock-style-layer';" +
-                    "      var style = document.getElementById(id);" +
-                    "      if(!style) {" +
-                    "        style = document.createElement('style');" +
-                    "        style.id = id;" +
-                    "        style.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
-                    "        (document.head || document.documentElement).appendChild(style);" +
-                    "      }" +
+                    "  function hardClean() {" +
+                    "    try {" +
                     "      document.querySelectorAll(SELECTORS).forEach(function(el){" +
                     "        if(el) el.remove();" +
                     "      });" +
                     "    }catch(e){}" +
                     "  }" +
                     "  " +
+                    "  if(!window.isHardIntercepted) {" +
+                    "    window.isHardIntercepted = true;" +
+                    "    " +
+                    "    var orgCreate = Document.prototype.createElement;" +
+                    "    Document.prototype.createElement = function(tag) {" +
+                    "      var el = orgCreate.apply(this, arguments);" +
+                    "      if(tag.toLowerCase() === 'div') {" +
+                    "        var orgSet = el.setAttribute;" +
+                    "        el.setAttribute = function(name, val) {" +
+                    "          orgSet.apply(this, arguments);" +
+                    "          if((name==='class' && val.indexOf('DownloadApp')!==-1) || " +
+                    "             (name==='data-sentry-component' && val.indexOf('DownloadApp')!==-1)) {" +
+                    "            el.style.setProperty('display','none','important');" +
+                    "            setTimeout(function(){ el.remove(); }, 0);" +
+                    "          }" +
+                    "        };" +
+                    "      }" +
+                    "      return el;" +
+                    "    };" +
+                    "    " +
+                    "    var style = document.createElement('style');" +
+                    "    style.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+                    "    (document.head || document.documentElement).appendChild(style);" +
+                    "    " +
+                    "    var obs = new MutationObserver(hardClean);" +
+                    "    obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true});" +
+                    "    " +
+                    "    window.addEventListener('input', hardClean, true);" +
+                    "    window.addEventListener('keydown', hardClean, true);" +
+                    "    setInterval(hardClean, 500);" +
+                    "  }" +
+                    "  hardClean();" +
                     "  try{" +
                     "    var m=document.createElement('meta');" +
                     "    m.name='viewport';" +
                     "    m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
                     "    (document.head || document.documentElement).appendChild(m);" +
                     "  }catch(e){}" +
-                    "  " +
-                    "  applyRule();" +
-                    "  " +
-                    "  if(!window.hasActiveBlocker) {" +
-                    "    window.hasActiveBlocker = true;" +
-                    "    var obs = new MutationObserver(applyRule);" +
-                    "    obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['style','class']});" +
-                    "    setInterval(applyRule, 2000);" +
-                    "  }" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);
@@ -184,3 +199,4 @@ public class MainActivity extends Activity {
     }
 }
 
+​

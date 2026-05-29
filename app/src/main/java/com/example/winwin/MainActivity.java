@@ -64,12 +64,11 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation
+        // Handle in-app navigation & Inject Blockers correctly
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
-                // Open external links in browser, keep site in app
                 if (!url.contains("com") &&
                     (url.startsWith("intent:") || url.startsWith("market:"))) {
                     try {
@@ -78,6 +77,51 @@ public class MainActivity extends Activity {
                     return true;
                 }
                 return false;
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+
+                // Pure CSS selectors from your uBlock static filters
+                String targetSelectors = 
+                    ".DownloadAppPopup, " +
+                    "div[data-sentry-component='DownloadAppPopup'], " +
+                    ".DownloadAppTopBar, " +
+                    "div[data-sentry-component='DownloadAppTopBar'], " +
+                    "div[class*='bg-black']";
+
+                // Combined script: Inject viewport metadata + MutationObserver destroyer
+                String injectedJS =
+                    "(function(){" +
+                    "  try{" +
+                    "    var m=document.createElement('meta');" +
+                    "    m.name='viewport';" +
+                    "    m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
+                    "    document.head.appendChild(m);" +
+                    "  }catch(e){}" +
+                    "  " +
+                    "  var SELECTORS = '" + targetSelectors + "';" +
+                    "  if(!SELECTORS) return;" +
+                    "  " +
+                    "  var cssStyle = document.createElement('style');" +
+                    "  cssStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+                    "  document.documentElement.appendChild(cssStyle);" +
+                    "  " +
+                    "  function hideBlocked(){" +
+                    "    try{" +
+                    "      document.querySelectorAll(SELECTORS).forEach(function(el){" +
+                    "        if(el) el.remove();" +
+                    "      });" +
+                    "    }catch(e){}" +
+                    "  }" +
+                    "  " +
+                    "  var obs = new MutationObserver(hideBlocked);" +
+                    "  obs.observe(document.documentElement, {childList:true, subtree:true});" +
+                    "  hideBlocked();" +
+                    "})();true;";
+
+                view.evaluateJavascript(injectedJS, null);
             }
         });
 
@@ -98,29 +142,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        // MutationObserver CSS class blocker + viewport inject
-        String injectedJS =
-            "(function(){" +
-            "try{" +
-            "var m=document.createElement('meta');" +
-            "m.name='viewport';" +
-            "m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
-            "document.head.appendChild(m);" +
-            "}catch(e){}" +
-            "var SELECTORS='';" +
-            "function hideBlocked(){" +
-            "if(!SELECTORS)return;" +
-            "try{document.querySelectorAll(SELECTORS).forEach(function(el){" +
-            "if(el&&el.style)el.style.setProperty('display','none','important');" +
-            "});}catch(e){}" +
-            "}" +
-            "var obs=new MutationObserver(hideBlocked);" +
-            "obs.observe(document.documentElement,{childList:true,subtree:true});" +
-            "hideBlocked();" +
-            "})();true;";
-
-        webView.evaluateJavascript(injectedJS, null);
-
+        // Load the target website after everything is properly configured
         webView.loadUrl("https://link.prod.sekai.chat/wqryZu");
     }
 
@@ -145,3 +167,4 @@ public class MainActivity extends Activity {
         }
     }
 }
+

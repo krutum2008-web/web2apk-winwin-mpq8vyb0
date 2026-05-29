@@ -82,16 +82,16 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                injectAbsoluteBlocker(view);
+                injectUltimateBlocker(view);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                injectAbsoluteBlocker(view);
+                injectUltimateBlocker(view);
             }
 
-            private void injectAbsoluteBlocker(WebView view) {
+            private void injectUltimateBlocker(WebView view) {
                 String targetSelectors = 
                     ".DownloadAppPopup, " +
                     "div[data-sentry-component='DownloadAppPopup'], " +
@@ -102,54 +102,80 @@ public class MainActivity extends Activity {
                 String injectedJS =
                     "(function(){" +
                     "  var SELECTORS = '" + targetSelectors + "';" +
-                    "  if(!SELECTORS) return;" +
                     "  " +
-                    "  function hardClean() {" +
+                    "  function nukeTargetElements() {" +
                     "    try {" +
-                    "      document.querySelectorAll(SELECTORS).forEach(function(el){" +
-                    "        if(el) el.remove();" +
-                    "      });" +
-                    "    }catch(e){}" +
+                    "      if (SELECTORS) {" +
+                    "        document.querySelectorAll(SELECTORS).forEach(function(el){" +
+                    "          if(el) el.remove();" +
+                    "        });" +
+                    "      }" +
+                    "      var allDivs = document.querySelectorAll('div, section, dialog');" +
+                    "      allDivs.forEach(HardScanElement);" +
+                    "    } catch(e) {}" +
                     "  }" +
                     "  " +
-                    "  if(!window.isHardIntercepted) {" +
-                    "    window.isHardIntercepted = true;" +
+                    "  function HardScanElement(el) {" +
+                    "    try {" +
+                    "      if (!el || el === document.body || el === document.documentElement) return;" +
+                    "      var style = window.getComputedStyle(el);" +
+                    "      var isFixedOrAbsolute = style.position === 'fixed' || style.position === 'absolute';" +
+                    "      if (!isFixedOrAbsolute) return;" +
+                    "      " +
+                    "      var text = el.innerText || el.textContent || '';" +
+                    "      var hasTriggerWords = text.indexOf('Keep playing in Sekai?') !== -1 || " +
+                    "                            text.indexOf('Download the Sekai app') !== -1 || " +
+                    "                            text.indexOf('Download') !== -1;" +
+                    "      " +
+                    "      var zIndex = parseInt(style.zIndex, 10) || 0;" +
+                    "      if (hasTriggerWords && (zIndex > 10 || style.position === 'fixed')) {" +
+                    "        el.style.setProperty('display', 'none', 'important');" +
+                    "        el.style.setProperty('visibility', 'hidden', 'important');" +
+                    "        setTimeout(function(){ if(el && el.parentNode) el.remove(); }, 0);" +
+                    "      }" +
+                    "    } catch(e) {}" +
+                    "  }" +
+                    "  " +
+                    "  try {" +
+                    "    var m = document.createElement('meta');" +
+                    "    m.name = 'viewport';" +
+                    "    m.content = 'width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
+                    "    (document.head || document.documentElement).appendChild(m);" +
+                    "  } catch(e) {}" +
+                    "  " +
+                    "  if (!window.isUltimateIntercepted) {" +
+                    "    window.isUltimateIntercepted = true;" +
                     "    " +
                     "    var orgCreate = Document.prototype.createElement;" +
                     "    Document.prototype.createElement = function(tag) {" +
                     "      var el = orgCreate.apply(this, arguments);" +
-                    "      if(tag.toLowerCase() === 'div') {" +
+                    "      if (tag.toLowerCase() === 'div') {" +
                     "        var orgSet = el.setAttribute;" +
                     "        el.setAttribute = function(name, val) {" +
                     "          orgSet.apply(this, arguments);" +
-                    "          if((name==='class' && val.indexOf('DownloadApp')!==-1) || " +
-                    "             (name==='data-sentry-component' && val.indexOf('DownloadApp')!==-1)) {" +
-                    "            el.style.setProperty('display','none','important');" +
-                    "            setTimeout(function(){ el.remove(); }, 0);" +
+                    "          if (name === 'class' || name === 'data-sentry-component') {" +
+                    "            if (val.indexOf('DownloadApp') !== -1) {" +
+                    "              el.style.setProperty('display', 'none', 'important');" +
+                    "              setTimeout(function(){ el.remove(); }, 0);" +
+                    "            }" +
                     "          }" +
                     "        };" +
                     "      }" +
                     "      return el;" +
                     "    };" +
                     "    " +
-                    "    var style = document.createElement('style');" +
-                    "    style.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
-                    "    (document.head || document.documentElement).appendChild(style);" +
+                    "    var cssStyle = document.createElement('style');" +
+                    "    cssStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+                    "    (document.head || document.documentElement).appendChild(cssStyle);" +
                     "    " +
-                    "    var obs = new MutationObserver(hardClean);" +
-                    "    obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true});" +
+                    "    var obs = new MutationObserver(nukeTargetElements);" +
+                    "    obs.observe(document.documentElement, {childList: true, subtree: true, attributes: true});" +
                     "    " +
-                    "    window.addEventListener('input', hardClean, true);" +
-                    "    window.addEventListener('keydown', hardClean, true);" +
-                    "    setInterval(hardClean, 500);" +
+                    "    window.addEventListener('input', nukeTargetElements, true);" +
+                    "    window.addEventListener('keydown', nukeTargetElements, true);" +
+                    "    setInterval(nukeTargetElements, 300);" +
                     "  }" +
-                    "  hardClean();" +
-                    "  try{" +
-                    "    var m=document.createElement('meta');" +
-                    "    m.name='viewport';" +
-                    "    m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
-                    "    (document.head || document.documentElement).appendChild(m);" +
-                    "  }catch(e){}" +
+                    "  nukeTargetElements();" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);
@@ -198,4 +224,4 @@ public class MainActivity extends Activity {
         }
     }
 }
-
+​

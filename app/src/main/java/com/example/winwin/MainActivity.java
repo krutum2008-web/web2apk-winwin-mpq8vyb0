@@ -64,7 +64,7 @@ public class MainActivity extends Activity {
         cookieManager.setAcceptCookie(true);
         cookieManager.setAcceptThirdPartyCookies(webView, true);
 
-        // Handle in-app navigation & Inject Blockers correctly
+        // Handle in-app navigation & Inject Permanent Blocker
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -80,10 +80,18 @@ public class MainActivity extends Activity {
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                injectPermanentBlocker(view);
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                injectPermanentBlocker(view);
+            }
 
-                // Pure CSS selectors from your uBlock static filters
+            private void injectPermanentBlocker(WebView view) {
                 String targetSelectors = 
                     ".DownloadAppPopup, " +
                     "div[data-sentry-component='DownloadAppPopup'], " +
@@ -91,34 +99,42 @@ public class MainActivity extends Activity {
                     "div[data-sentry-component='DownloadAppTopBar'], " +
                     "div[class*='bg-black']";
 
-                // Combined script: Inject viewport metadata + MutationObserver destroyer
                 String injectedJS =
                     "(function(){" +
-                    "  try{" +
-                    "    var m=document.createElement('meta');" +
-                    "    m.name='viewport';" +
-                    "    m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
-                    "    document.head.appendChild(m);" +
-                    "  }catch(e){}" +
-                    "  " +
                     "  var SELECTORS = '" + targetSelectors + "';" +
                     "  if(!SELECTORS) return;" +
                     "  " +
-                    "  var cssStyle = document.createElement('style');" +
-                    "  cssStyle.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
-                    "  document.documentElement.appendChild(cssStyle);" +
-                    "  " +
-                    "  function hideBlocked(){" +
+                    "  function applyRule() {" +
                     "    try{" +
+                    "      var id = 'ublock-style-layer';" +
+                    "      var style = document.getElementById(id);" +
+                    "      if(!style) {" +
+                    "        style = document.createElement('style');" +
+                    "        style.id = id;" +
+                    "        style.innerHTML = SELECTORS + ' { display: none !important; visibility: hidden !important; opacity: 0 !important; pointer-events: none !important; }';" +
+                    "        (document.head || document.documentElement).appendChild(style);" +
+                    "      }" +
                     "      document.querySelectorAll(SELECTORS).forEach(function(el){" +
                     "        if(el) el.remove();" +
                     "      });" +
                     "    }catch(e){}" +
                     "  }" +
                     "  " +
-                    "  var obs = new MutationObserver(hideBlocked);" +
-                    "  obs.observe(document.documentElement, {childList:true, subtree:true});" +
-                    "  hideBlocked();" +
+                    "  try{" +
+                    "    var m=document.createElement('meta');" +
+                    "    m.name='viewport';" +
+                    "    m.content='width=1280,initial-scale=1.0,maximum-scale=1.0,user-scalable=no';" +
+                    "    (document.head || document.documentElement).appendChild(m);" +
+                    "  }catch(e){}" +
+                    "  " +
+                    "  applyRule();" +
+                    "  " +
+                    "  if(!window.hasActiveBlocker) {" +
+                    "    window.hasActiveBlocker = true;" +
+                    "    var obs = new MutationObserver(applyRule);" +
+                    "    obs.observe(document.documentElement, {childList:true, subtree:true, attributes:true, attributeFilter:['style','class']});" +
+                    "    setInterval(applyRule, 2000);" +
+                    "  }" +
                     "})();true;";
 
                 view.evaluateJavascript(injectedJS, null);
